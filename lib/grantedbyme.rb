@@ -1,11 +1,35 @@
 ##
+# The MIT License (MIT)
+#
+# Copyright (c) 2016 GrantedByMe
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+#
+
+##
 # GrantedByMe Ruby SDK
 # author: GrantedByMe <info@grantedby.me>
 #
 
 class GrantedByMe
 
-  VERSION = '1.0.6'
+  VERSION = '1.0.7'
   BRANCH = 'master'
   HOST = 'https://api.grantedby.me/v1/service/'
   USER_AGENT = 'GrantedByMe/' + VERSION + '-' + BRANCH + ' (Ruby)'
@@ -13,10 +37,22 @@ class GrantedByMe
   ##
   # Constructor
   #
-  def initialize(private_key, server_key)
+  def initialize(private_key: nil, private_key_file: nil, server_key: nil, server_key_file: nil)
     @crypto = Crypto.new
     @server_key = server_key
     @private_key = private_key
+    # Load Service RSA private key
+    if private_key_file and (File.file?(private_key_file))
+      @private_key = open private_key_file, 'r' do |io|
+        io.read
+      end
+    end
+    # Load Server RSA public key
+    if server_key_file and (File.file?(server_key_file))
+      @server_key = open server_key_file, 'r' do |io|
+        io.read
+      end
+    end
     @api_url = HOST
     if server_key
       @public_hash = Crypto.digest(server_key)
