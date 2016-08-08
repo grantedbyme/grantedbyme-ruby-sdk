@@ -29,7 +29,7 @@
 
 class GrantedByMe
 
-  VERSION = '1.0.8'
+  VERSION = '1.0.2'
   BRANCH = 'master'
   HOST = 'https://api.grantedby.me/v1/service/'
   USER_AGENT = 'GrantedByMe/' + VERSION + '-' + BRANCH + ' (Ruby)'
@@ -54,6 +54,7 @@ class GrantedByMe
       end
     end
     @api_url = HOST
+    @is_ssl_verify = true
     if server_key
       @public_hash = Crypto.digest(server_key)
     end
@@ -97,6 +98,13 @@ class GrantedByMe
   #
   def get_random_string(length)
     return Base64.strict_encode64(OpenSSL::Random.random_bytes(length))
+  end
+
+  ##
+  # Switches SSL verify state (always enable in production)
+  #
+  def set_ssl_verify(is_enabled)
+    @is_ssl_verify = is_enabled
   end
 
   ########################################
@@ -248,7 +256,11 @@ class GrantedByMe
     if uri.scheme == 'https'
       http.use_ssl = true
       http.ssl_version = :TLSv1_2
-      http.verify_mode = OpenSSL::SSL::VERIFY_PEER
+      if @is_ssl_verify
+        http.verify_mode = OpenSSL::SSL::VERIFY_PEER
+      else
+        http.verify_mode = OpenSSL::SSL::VERIFY_NONE
+      end
     end
     encrypted_params = @crypto.encrypt(params, @private_key, @server_key)
     encrypted_params['public_hash'] = @public_hash
