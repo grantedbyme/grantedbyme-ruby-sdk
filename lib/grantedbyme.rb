@@ -29,7 +29,7 @@
 
 class GrantedByMe
 
-  VERSION = '1.0.2'
+  VERSION = '1.0.3'
   BRANCH = 'master'
   HOST = 'https://api.grantedby.me/v1/service/'
   USER_AGENT = 'GrantedByMe/' + VERSION + '-' + BRANCH + ' (Ruby)'
@@ -205,14 +205,8 @@ class GrantedByMe
   # Retrieve a session link token
   #
   def get_token(type, client_ip=nil, client_ua=nil)
-    params = get_params()
+    params = get_params(client_ip, client_ua)
     params['token_type'] = type
-    if client_ua
-        params['http_user_agent'] = client_ua
-    end
-    if client_ip
-      params['remote_addr'] = client_ip
-    end
     post(params, 'get_session_token')
   end
 
@@ -220,15 +214,18 @@ class GrantedByMe
   # Retrieve a session link token state
   #
   def get_token_state(token, client_ip=nil, client_ua=nil)
-    params = get_params()
+    params = get_params(client_ip, client_ua)
     params['token'] = token
-    if client_ua
-      params['http_user_agent'] = client_ua
-    end
-    if client_ip
-      params['remote_addr'] = client_ip
-    end
     post(params, 'get_session_state')
+  end
+
+  ##
+  # Revokes an active session token
+  #
+  def revoke_session_token(token, client_ip=nil, client_ua=nil)
+    params = get_params(client_ip, client_ua)
+    params['token'] = token
+    post(params, 'revoke_session_token')
   end
 
   ########################################
@@ -238,9 +235,15 @@ class GrantedByMe
   ##
   # Assembles default POST request parameters
   #
-  def get_params()
+  def get_params(client_ip=nil, client_ua=nil)
     params = {}
     params['timestamp'] = Time.now.to_i
+    if client_ip
+      params['remote_addr'] = client_ip
+    end
+    if client_ua
+      params['http_user_agent'] = client_ua
+    end
     params
   end
 
