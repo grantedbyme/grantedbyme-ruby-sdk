@@ -29,7 +29,7 @@
 
 class GrantedByMe
 
-  VERSION = '1.0.4'
+  VERSION = '1.0.5'
   BRANCH = 'master'
   HOST = 'https://api.grantedby.me/v1/service/'
   USER_AGENT = 'GrantedByMe/' + VERSION + '-' + BRANCH + ' (Ruby)'
