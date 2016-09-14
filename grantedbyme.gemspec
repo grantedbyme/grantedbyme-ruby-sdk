@@ -1,7 +1,7 @@
 # coding: utf-8
 Gem::Specification.new do |s|
   s.name        = 'grantedbyme'
-  s.version     = '1.0.8'
+  s.version     = '1.0.9'
   s.summary     = 'GrantedByMe'
   s.description = 'GrantedByMe Ruby SDK'
   s.authors     = ['GrantedByMe']
