@@ -29,7 +29,7 @@
 
 class GrantedByMe
 
-  VERSION = '1.0.7'
+  VERSION = '1.0.8'
   BRANCH = 'master'
   HOST = 'https://api.grantedby.me/v1/service/'
   USER_AGENT = 'GrantedByMe/' + VERSION + '-' + BRANCH + ' (Ruby)'
@@ -38,7 +38,6 @@ class GrantedByMe
   # Constructor
   #
   def initialize(private_key: nil, private_key_file: nil, server_key: nil, server_key_file: nil)
-    @crypto = Crypto.new
     @server_key = server_key
     @private_key = private_key
     # Load Service RSA private key
@@ -53,10 +52,11 @@ class GrantedByMe
         io.read
       end
     end
+    @crypto = Crypto.new(@private_key, @server_key)
     @api_url = HOST
     @is_ssl_verify = true
-    if server_key
-      @public_hash = Crypto.digest(server_key)
+    if @server_key
+      @public_hash = Crypto.sha512(@server_key)
     end
   end
 
@@ -68,7 +68,7 @@ class GrantedByMe
   # Returns the Service RSA public key in serialized PEM string format
   #
   def get_private_key
-    return @private_key
+    @private_key
   end
 
   ##
@@ -76,28 +76,28 @@ class GrantedByMe
   #
   def get_public_key
     private_rsa = OpenSSL::PKey::RSA.new @private_key
-    return private_rsa.public_key.to_pem
+    private_rsa.public_key.to_pem
   end
 
   ##
   # Returns the Server RSA public key in serialized PEM string format
   #
   def get_server_key
-    return @server_key
+    @server_key
   end
 
   ##
   # Returns the crypto helper reference
   #
   def get_crypto
-    return @crypto
+    @crypto
   end
 
   ##
   # Returns a random string with length
   #
   def get_random_string(length)
-    return Base64.strict_encode64(OpenSSL::Random.random_bytes(length))
+    Base64.strict_encode64(OpenSSL::Random.random_bytes(length))
   end
 
   ##
@@ -142,7 +142,7 @@ class GrantedByMe
       handshake = activate_handshake(key.public_key.to_pem)
       if handshake && handshake['success'] && handshake['public_key']
         @server_key = handshake['public_key']
-        @public_hash = Crypto.digest(@server_key)
+        @public_hash = Crypto.sha512(@server_key)
       else
         raise 'Handshake failed'
       end
@@ -176,7 +176,7 @@ class GrantedByMe
   #
   def unlink_account(grantor)
     params = get_params()
-    params['grantor'] = Crypto.digest(grantor)
+    params['grantor'] = Crypto.sha512(grantor)
     post(params, 'unlink_account')
   end
 
@@ -265,13 +265,13 @@ class GrantedByMe
         http.verify_mode = OpenSSL::SSL::VERIFY_NONE
       end
     end
-    encrypted_params = @crypto.encrypt(params, @private_key, @server_key)
+    encrypted_params = @crypto.encrypt(params)
     encrypted_params['public_hash'] = @public_hash
     request.body = encrypted_params.to_json
     response = http.request(request)
     result = JSON.parse(response.body)
     if result['payload']
-      return @crypto.decrypt(result, @private_key, @server_key)
+      return @crypto.decrypt(result)
     end
     return result
     rescue => e

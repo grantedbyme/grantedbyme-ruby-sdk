@@ -1,15 +1,13 @@
 # coding: utf-8
 Gem::Specification.new do |s|
   s.name        = 'grantedbyme'
-  s.version     = '1.0.7'
+  s.version     = '1.0.8'
   s.summary     = 'GrantedByMe'
   s.description = 'GrantedByMe Ruby SDK'
   s.authors     = ['GrantedByMe']
   s.email       = 'info@grantedby.me'
   s.files       = ['lib/grantedbyme.rb',
-                   'lib/grantedbyme/crypto.rb',
-                   'lib/grantedbyme/crypto/aes.rb',
-                   'lib/grantedbyme/crypto/rsa.rb']
+                   'lib/grantedbyme/crypto.rb']
   s.homepage    = 'http://rubygems.org/gems/grantedbyme'
   s.license     = 'MIT'
   

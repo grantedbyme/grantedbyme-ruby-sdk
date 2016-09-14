@@ -32,7 +32,43 @@ class Crypto
   ##
   # Constructor
   #
-  def initialize()
+  def initialize(private_key = nil, public_key = nil)
+    if private_key && public_key
+      load_keypair(private_key, public_key)
+    end
+  end
+
+  ##
+  # Returns the RSA private key in serialized PEM format
+  #
+  def get_private_key
+    @private_key
+  end
+
+  ##
+  # Returns the RSA public key in serialized PEM format
+  #
+  def get_public_key
+    @public_key
+  end
+
+  ##
+  # Generates a new RSA key pair
+  #
+  def generate_keypair
+    key = OpenSSL::PKey::RSA.new 2048
+    load_keypair(key.to_pem, key.public_key.to_pem)
+    [@private_key, @public_key]
+  end
+
+  ##
+  # Loads an RSA key pair from PEM strings
+  #
+  def load_keypair(private_key, public_key)
+    @private_key = private_key
+    @public_key = public_key
+    @private_rsa = OpenSSL::PKey::RSA.new @private_key
+    @public_rsa = OpenSSL::PKey::RSA.new @public_key
   end
 
   ########################################
@@ -42,58 +78,70 @@ class Crypto
   ##
   # Encrypts a Hash using compound encryption
   #
-  def encrypt(data, private_key, public_key)
-    aes = AES.new()
-    rsa = RSA.new(private_key, public_key)
+  def encrypt(data)
     plain_text = data.to_json
     if plain_text.length < 255
-      rsa_result = rsa.encrypt(plain_text)
-      rsa_signature = rsa.sign(plain_text)
-      result = {payload: Base64.strict_encode64(rsa_result), signature: Base64.strict_encode64(rsa_signature), alg: 'RS512'}
+      rsa_result = @public_rsa.public_encrypt(plain_text, OpenSSL::PKey::RSA::PKCS1_OAEP_PADDING)
+      rsa_signature = @private_rsa.sign(OpenSSL::Digest::SHA512.new, plain_text)
+      result = {
+          payload: Base64.strict_encode64(rsa_result),
+          signature: Base64.strict_encode64(rsa_signature),
+          alg: 'RS512'
+      }
     else
-      aes_result = aes.encrypt(plain_text)
-      message = Base64.strict_encode64(aes_result[0])
-      aes_key = Base64.strict_encode64(aes_result[1])
-      aes_iv = Base64.strict_encode64(aes_result[2])
-      aes_signature = Base64.strict_encode64(aes_result[3])
+      aes = OpenSSL::Cipher::Cipher.new('AES-256-CBC')
+      aes.encrypt()
+      key = aes.random_key()
+      iv = aes.random_iv()
+      aes_signature = OpenSSL::HMAC.digest(OpenSSL::Digest.new('sha256'), key, plain_text)
+      aes_result = aes.update(plain_text)
+      aes_result << aes.final
       rsa_data = {
-          cipher_key: aes_key,
-          cipher_iv: aes_iv,
-          signature: aes_signature,
+          cipher_key: Base64.strict_encode64(key),
+          cipher_iv: Base64.strict_encode64(iv),
+          signature: Base64.strict_encode64(aes_signature),
           timestamp: Time.now.to_i
       }
-      rsa_result = rsa.encrypt(rsa_data.to_json)
-      rsa_signature = rsa.sign(rsa_data.to_json)
-      result = {payload: Base64.strict_encode64(rsa_result), signature: Base64.strict_encode64(rsa_signature), message: message, alg: 'RS512'}
+      rsa_result = @public_rsa.public_encrypt(rsa_data.to_json, OpenSSL::PKey::RSA::PKCS1_OAEP_PADDING)
+      rsa_signature = @private_rsa.sign(OpenSSL::Digest::SHA512.new, rsa_data.to_json)
+      result = {
+          payload: Base64.strict_encode64(rsa_result),
+          signature: Base64.strict_encode64(rsa_signature),
+          message: Base64.strict_encode64(aes_result),
+          alg: 'RS512'
+      }
     end
-    return result
+    result
   end
 
   ##
   # Decrypts a Hash using compound encryption
   #
-  def decrypt(data, private_key, public_key)
-    aes = AES.new()
-    rsa = RSA.new(private_key, public_key)
+  def decrypt(data)
     payload = Base64.strict_decode64(data['payload'])
     signature = Base64.strict_decode64(data['signature'])
-    cipher_data = rsa.decrypt(payload)
+    cipher_data = @private_rsa.private_decrypt(payload, OpenSSL::PKey::RSA::PKCS1_OAEP_PADDING)
     cipher_json = JSON.parse(cipher_data)
-    if (!rsa.verify(signature, cipher_data))
+    if (!@public_rsa.verify(OpenSSL::Digest::SHA512.new, signature, cipher_data))
       raise 'Invalid RSA signature'
     end
     if !data.has_key?('message') and !cipher_json.has_key?('cipher_key') and !cipher_json.has_key?('cipher_iv') and !cipher_json.has_key?('signature')
-      return cipher_json
+      cipher_json
     else
       cipher_key = Base64.strict_decode64(cipher_json['cipher_key'])
       cipher_iv = Base64.strict_decode64(cipher_json['cipher_iv'])
       cipher_signature = Base64.strict_decode64(cipher_json['signature'])
       message = Base64.strict_decode64(data['message'])
-      result = aes.decrypt(message, cipher_key, cipher_iv)
-      if !aes.verify(result, cipher_key, cipher_signature)
+      cipher = OpenSSL::Cipher::Cipher.new('AES-256-CBC')
+      cipher.decrypt
+      cipher.key = cipher_key
+      cipher.iv = cipher_iv
+      result = cipher.update(message)
+      result << cipher.final
+      if cipher_signature != OpenSSL::HMAC.digest(OpenSSL::Digest.new('sha256'), cipher_key, result)
         raise 'Invalid HMAC signature'
       end
-      return JSON.parse(result)
+      JSON.parse(result)
     end
   end
 
@@ -104,14 +152,14 @@ class Crypto
   ##
   # Calculates SHA-512 digest for an input String
   #
-  def self.digest(input_string)
+  def self.sha512(input_string)
     normalized_string = input_string.encode(input_string.encoding, :universal_newline => true)
     return Digest::SHA2.new(512).hexdigest(normalized_string)
   end
 
 end
 
-require 'grantedbyme/crypto/aes'
-require 'grantedbyme/crypto/rsa'
 require 'json'
 require 'base64'
+require 'openssl'
+require 'digest/sha2'
