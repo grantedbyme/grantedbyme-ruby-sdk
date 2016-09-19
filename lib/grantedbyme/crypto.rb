@@ -80,7 +80,7 @@ class Crypto
   #
   def encrypt(data)
     plain_text = data.to_json
-    if plain_text.length < 255
+    if plain_text.length < 215
       rsa_result = @public_rsa.public_encrypt(plain_text, OpenSSL::PKey::RSA::PKCS1_OAEP_PADDING)
       rsa_signature = @private_rsa.sign(OpenSSL::Digest::SHA512.new, plain_text)
       result = {
@@ -90,9 +90,9 @@ class Crypto
       }
     else
       aes = OpenSSL::Cipher::Cipher.new('AES-256-CBC')
-      aes.encrypt()
-      key = aes.random_key()
-      iv = aes.random_iv()
+      aes.encrypt
+      key = aes.random_key
+      iv = aes.random_iv
       aes_signature = OpenSSL::HMAC.digest(OpenSSL::Digest.new('sha256'), key, plain_text)
       aes_result = aes.update(plain_text)
       aes_result << aes.final
@@ -122,7 +122,7 @@ class Crypto
     signature = Base64.strict_decode64(data['signature'])
     cipher_data = @private_rsa.private_decrypt(payload, OpenSSL::PKey::RSA::PKCS1_OAEP_PADDING)
     cipher_json = JSON.parse(cipher_data)
-    if (!@public_rsa.verify(OpenSSL::Digest::SHA512.new, signature, cipher_data))
+    if !@public_rsa.verify(OpenSSL::Digest::SHA512.new, signature, cipher_data)
       raise 'Invalid RSA signature'
     end
     if !data.has_key?('message') and !cipher_json.has_key?('cipher_key') and !cipher_json.has_key?('cipher_iv') and !cipher_json.has_key?('signature')
@@ -152,9 +152,40 @@ class Crypto
   ##
   # Calculates SHA-512 digest for an input String
   #
-  def self.sha512(input_string)
-    normalized_string = input_string.encode(input_string.encoding, :universal_newline => true)
+  def self.sha512(data)
+    normalized_string = data.encode(data.encoding, :universal_newline => true)
     return Digest::SHA2.new(512).hexdigest(normalized_string)
+  end
+
+  ##
+  # Generates a password hash of input data
+  #
+  def self.pbkdf2(data, salt)
+    # salt = OpenSSL::Random.random_bytes(16)
+    digest = OpenSSL::Digest::SHA256.new
+    OpenSSL::PKCS5.pbkdf2_hmac(data, salt, 100000, digest.digest_length, digest)
+  end
+
+  ##
+  # Returns a random string with length
+  #
+  def self.random_string(length)
+    Base64.strict_encode64(OpenSSL::Random.random_bytes(length))
+  end
+
+  ##
+  # Safe equal time comparison helper
+  #
+  def eql_time_cmp(a, b)
+    unless a.length == b.length
+      return false
+    end
+    cmp = b.bytes.to_a
+    result = 0
+    a.bytes.each_with_index {|c,i|
+      result |= c ^ cmp[i]
+    }
+    result == 0
   end
 
 end

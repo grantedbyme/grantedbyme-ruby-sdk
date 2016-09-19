@@ -29,13 +29,36 @@
 
 class GrantedByMe
 
-  VERSION = '1.0.9'
+  VERSION = '1.0.10'
   BRANCH = 'master'
   HOST = 'https://api.grantedby.me/v1/service/'
   USER_AGENT = 'GrantedByMe/' + VERSION + '-' + BRANCH + ' (Ruby)'
 
+  CHALLENGE_ACCOUNT = 1
+  CHALLENGE_SESSION = 2
+  CHALLENGE_REGISTER = 4
+
+  def self.challenge_account
+    CHALLENGE_ACCOUNT
+  end
+
+  def self.challenge_session
+    CHALLENGE_SESSION
+  end
+
+  def self.challenge_register
+    CHALLENGE_REGISTER
+  end
+
   ##
-  # Constructor
+  # Creates a new GrantedByMe SDK instance.
+  #
+  # ==== Attributes
+  #
+  # * +private_key+ - Service RSA private key encoded in PEM format
+  # * +private_key_file+ - The path to the service RSA private key
+  # * +server_key+ - Server RSA public key encoded in PEM format
+  # * +server_key_file+ - The path to the server RSA public key
   #
   def initialize(private_key: nil, private_key_file: nil, server_key: nil, server_key_file: nil)
     @server_key = server_key
@@ -94,13 +117,6 @@ class GrantedByMe
   end
 
   ##
-  # Returns a random string with length
-  #
-  def get_random_string(length)
-    Base64.strict_encode64(OpenSSL::Random.random_bytes(length))
-  end
-
-  ##
   # Switches SSL verify state (always enable in production)
   #
   def set_ssl_verify(is_enabled)
@@ -112,120 +128,109 @@ class GrantedByMe
   ########################################
 
   ##
-  # RSA key exchange
+  # Initiate key exchange for encrypted communication.
+  #
+  # ==== Attributes
+  #
+  # * +public_key+ - Service RSA public key encoded in PEM format
   #
   def activate_handshake(public_key)
-    params = {}
+    params = get_params
     params['public_key'] = public_key
-    params['timestamp'] = Time.now.to_i
-    url = @api_url + 'activate_handshake' + '/'
-    uri = URI(url)
-    http = Net::HTTP.new(uri.host, uri.port)
-    request = Net::HTTP::Post.new(uri.path, initheader = {'Content-Type' => 'application/json'})
-    request.body = params.to_json
-    response = http.request(request)
-    return JSON.parse(response.body)
-    rescue => e
-      puts "failed: #{e}"
-      return nil
+    post(params, 'activate_handshake')
   end
 
   ##
-  # Service activation
+  # Active pending service using service key.
+  #
+  # ==== Attributes
+  #
+  # * +service_key+ - The activation service key
   #
   def activate_service(service_key)
-    if @private_key == nil
-      key = OpenSSL::PKey::RSA.new 2048
-      @private_key = key.to_pem
+    key = OpenSSL::PKey::RSA.new 2048
+    @private_key = key.to_pem
+    handshake = activate_handshake(key.public_key.to_pem)
+    if handshake && handshake['success'] && handshake['public_key']
+      @server_key = handshake['public_key']
+      @public_hash = Crypto.sha512(@server_key)
+    else
+      raise 'Handshake failed'
     end
-    if @server_key == nil
-      handshake = activate_handshake(key.public_key.to_pem)
-      if handshake && handshake['success'] && handshake['public_key']
-        @server_key = handshake['public_key']
-        @public_hash = Crypto.sha512(@server_key)
-      else
-        raise 'Handshake failed'
-      end
-    end
-    params = get_params()
-    params['grantor'] = get_random_string(128)
+    params = get_params
     params['service_key'] = service_key
     post(params, 'activate_service')
   end
 
   ##
-  # Service deactivation
+  # Links a service user account with a GrantedByMe account.
   #
-  def deactivate_service
-    params = get_params()
-    post(params, 'deactivate_service')
-  end
-
-  ##
-  # Link a user service account
+  # ==== Attributes
   #
-  def link_account(token, grantor)
-    params = get_params()
-    params['token'] = token
-    params['grantor'] = grantor
+  # * +challenge+ - The challenge used to verify the user
+  # * +authenticator_secret+ - The secret used for user authentication
+  #
+  def link_account(challenge, authenticator_secret)
+    params = get_params
+    params['challenge'] = challenge
+    params['authenticator_secret'] = authenticator_secret
     post(params, 'link_account')
   end
 
   ##
-  # Unlink a user service account
+  # Un-links a service user account with a GrantedByMe account.
   #
-  def unlink_account(grantor)
-    params = get_params()
-    params['grantor'] = Crypto.sha512(grantor)
+  # ==== Attributes
+  #
+  # * +authenticator_secret+ - The secret used for user authentication
+  #
+  def unlink_account(authenticator_secret)
+    params = get_params
+    params['authenticator_secret'] = authenticator_secret
     post(params, 'unlink_account')
   end
 
   ##
-  # Retrieve an account link token
+  # Returns a challenge with required type.
   #
-  def get_account_token()
-    get_token(1)
-  end
-
-  ##
-  # Retrieve a session link token
+  # ==== Attributes
   #
-  def get_session_token()
-    get_token(2)
-  end
-
-  ##
-  # Retrieve a session link token
+  # * +challenge_type+ - The type of requested challenge
+  # * +client_ip+ - The client IP address
+  # * +client_ua+ - The client user-agent identifier
   #
-  def get_register_token()
-    get_token(4)
-  end
-
-  ##
-  # Retrieve a session link token
-  #
-  def get_token(type, client_ip=nil, client_ua=nil)
+  def get_challenge(challenge_type, client_ip=nil, client_ua=nil)
     params = get_params(client_ip, client_ua)
-    params['token_type'] = type
-    post(params, 'get_session_token')
+    params['challenge_type'] = challenge_type
+    post(params, 'get_challenge')
   end
 
   ##
-  # Retrieve a session link token state
+  # Returns a challenge state.
   #
-  def get_token_state(token, client_ip=nil, client_ua=nil)
+  # ==== Attributes
+  #
+  # * +challenge+ - The challenge to check
+  # * +client_ip+ - The client IP address
+  # * +client_ua+ - The client user-agent identifier
+  #
+  def get_challenge_state(challenge, client_ip=nil, client_ua=nil)
     params = get_params(client_ip, client_ua)
-    params['token'] = token
-    post(params, 'get_session_state')
+    params['challenge'] = challenge
+    post(params, 'get_challenge_state')
   end
 
   ##
-  # Revokes an active session token
+  # Notify the GrantedByMe server about the user has been logged out from the service.
   #
-  def revoke_session_token(token, client_ip=nil, client_ua=nil)
-    params = get_params(client_ip, client_ua)
-    params['token'] = token
-    post(params, 'revoke_session_token')
+  # ==== Attributes
+  #
+  # * +challenge+ - The challenge representing an active authentication session
+  #
+  def revoke_challenge(challenge)
+    params = get_params
+    params['challenge'] = challenge
+    post(params, 'revoke_challenge')
   end
 
   ########################################
@@ -233,7 +238,12 @@ class GrantedByMe
   ########################################
 
   ##
-  # Assembles default POST request parameters
+  # Returns the default HTTP parameters
+  #
+  # ==== Attributes
+  #
+  # * +client_ip+ - The client IP address
+  # * +client_ua+ - The client user-agent identifier
   #
   def get_params(client_ip=nil, client_ua=nil)
     params = {}
@@ -248,7 +258,12 @@ class GrantedByMe
   end
 
   ##
-  # Sends a POST JSON request
+  # Sends a HTTP (POST) API request
+  #
+  # ==== Attributes
+  #
+  # * +params+ - The request parameter object
+  # * +operation+ - The API operation name
   #
   def post(params, operation)
     # puts("post: #{params}")
@@ -265,8 +280,12 @@ class GrantedByMe
         http.verify_mode = OpenSSL::SSL::VERIFY_NONE
       end
     end
-    encrypted_params = @crypto.encrypt(params)
-    encrypted_params['public_hash'] = @public_hash
+    if operation == 'activate_handshake'
+      encrypted_params = params
+    else
+      encrypted_params = @crypto.encrypt(params)
+      encrypted_params['public_hash'] = @public_hash
+    end
     request.body = encrypted_params.to_json
     response = http.request(request)
     result = JSON.parse(response.body)
@@ -277,6 +296,28 @@ class GrantedByMe
     rescue => e
       puts "http post failed: #{e}"
       return '{"success": false}'
+  end
+
+  ########################################
+  # STATIC
+  ########################################
+
+  ##
+  # Generates a secure random authenticator secret.
+  #
+  def self.generate_authenticator_secret
+    Crypto.random_string(128)
+  end
+
+  ##
+  # Generates hash digest of an authenticator secret.
+  #
+  # ==== Attributes
+  #
+  # * +authenticator_secret+ - The authenticator secret to hash
+  #
+  def self.hash_authenticator_secret(authenticator_secret)
+    Crypto.sha512(authenticator_secret)
   end
 
 end
