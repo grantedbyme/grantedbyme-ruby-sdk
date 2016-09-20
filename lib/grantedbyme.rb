@@ -29,25 +29,25 @@
 
 class GrantedByMe
 
-  VERSION = '1.0.10'
+  VERSION = '1.0.11'
   BRANCH = 'master'
   HOST = 'https://api.grantedby.me/v1/service/'
   USER_AGENT = 'GrantedByMe/' + VERSION + '-' + BRANCH + ' (Ruby)'
 
-  CHALLENGE_ACCOUNT = 1
-  CHALLENGE_SESSION = 2
-  CHALLENGE_REGISTER = 4
+  CHALLENGE_AUTHORIZE = 1
+  CHALLENGE_AUTHENTICATE = 2
+  CHALLENGE_PROFILE = 4
 
-  def self.challenge_account
-    CHALLENGE_ACCOUNT
+  def self.challenge_authorize
+    CHALLENGE_AUTHORIZE
   end
 
-  def self.challenge_session
-    CHALLENGE_SESSION
+  def self.challenge_authenticate
+    CHALLENGE_AUTHENTICATE
   end
 
-  def self.challenge_register
-    CHALLENGE_REGISTER
+  def self.challenge_profile
+    CHALLENGE_PROFILE
   end
 
   ##
@@ -160,6 +160,14 @@ class GrantedByMe
     params = get_params
     params['service_key'] = service_key
     post(params, 'activate_service')
+  end
+
+  ##
+  # Deactivate service for reactivation.
+  #
+  def deactivate_service
+    params = get_params
+    post(params, 'deactivate_service')
   end
 
   ##
