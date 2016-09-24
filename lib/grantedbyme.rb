@@ -29,7 +29,7 @@
 
 class GrantedByMe
 
-  VERSION = '1.0.12'
+  VERSION = '1.0.13'
   BRANCH = 'master'
   HOST = 'https://api.grantedby.me/v1/service/'
   USER_AGENT = 'GrantedByMe/' + VERSION + '-' + BRANCH + ' (Ruby)'
@@ -163,14 +163,6 @@ class GrantedByMe
   end
 
   ##
-  # Deactivate service for reactivation.
-  #
-  def deactivate_service
-    params = get_params
-    post(params, 'deactivate_service')
-  end
-
-  ##
   # Links a service user account with a GrantedByMe account.
   #
   # ==== Attributes
@@ -183,19 +175,6 @@ class GrantedByMe
     params['challenge'] = challenge
     params['authenticator_secret'] = authenticator_secret
     post(params, 'link_account')
-  end
-
-  ##
-  # Un-links a service user account with a GrantedByMe account.
-  #
-  # ==== Attributes
-  #
-  # * +authenticator_secret+ - The secret used for user authentication
-  #
-  def unlink_account(authenticator_secret)
-    params = get_params
-    params['authenticator_secret'] = authenticator_secret
-    post(params, 'unlink_account')
   end
 
   ##
